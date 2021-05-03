@@ -4,49 +4,11 @@
 		- https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt#rsa-oaep_2
 		- https://github.com/mdn/dom-examples/blob/master/web-crypto/encrypt-decrypt/rsa-oaep.js
 	*/
-		/*
-		Store the calculated ciphertext here, so we can decrypt the message later.
-		*/
-		let ciphertext;
-	  
-		/*
-		Fetch the contents of the "message" textbox, and encode it
-		in a form we can use for the encrypt operation.
-		*/
-		function getMessageEncoding() {
-		  const messageBox = document.querySelector("#rsa-oaep-message");
-		  let message = messageBox.value;
-		  let enc = new TextEncoder();
-		  return enc.encode(message);
-		}
-	  
-		/*
-		Get the encoded message, encrypt it and display a representation
-		of the ciphertext in the "Ciphertext" element.
-		*/
-		async function encryptMessage(key) {
-		  let encoded = getMessageEncoding();
-		  ciphertext = await window.crypto.subtle.encrypt(
-			{
-			  name: "RSA-OAEP"
-			},
-			key,
-			encoded
-		  );
-	  
-		  let buffer = new Uint8Array(ciphertext, 0, 5);
-		  const ciphertextValue = document.querySelector(".rsa-oaep .ciphertext-value");
-		  ciphertextValue.classList.add('fade-in');
-		  ciphertextValue.addEventListener('animationend', () => {
-			ciphertextValue.classList.remove('fade-in');
-		  });
-		  ciphertextValue.textContent = `${buffer}...[${ciphertext.byteLength} bytes total]`;
-		}
-	  
+
 		/*
 		Fetch the ciphertext and decrypt it.
 		Write the decrypted message into the "Decrypted" box.
-		*/
+		
 		async function decryptMessage(key) {
 		  let decrypted = await window.crypto.subtle.decrypt(
 			{
@@ -64,17 +26,20 @@
 		  });
 		  decryptedValue.textContent = dec.decode(decrypted);
 		}
+		*/
 	/*
 	End of Mozilla Developer Network Web Docs content.
-	*/	  
+	*/
+
+	var action = "encrypt";
+	var key, privateKey, secret, encrypted;
 
 	function generateKey () {
 		// Fragment taken from  Mozilla Developer Network Web Docs
 		window.crypto.subtle.generateKey(
 		  {
 		  name: "RSA-OAEP",
-		  // Consider using a 4096-bit key for systems that require long-term security
-		  modulusLength: 2048,
+		  modulusLength: 4096,
 		  publicExponent: new Uint8Array([1, 0, 1]),
 		  hash: "SHA-256",
 		  },
@@ -93,44 +58,95 @@
 			}
 		)
 	}
-	
-	/*
-	.then((keyPair) => {
-		  const encryptButton = document.querySelector(".rsa-oaep .encrypt-button");
-		  encryptButton.addEventListener("click", () => {
-			encryptMessage(keyPair.publicKey);
-		  });
-	  
-		  const decryptButton = document.querySelector(".rsa-oaep .decrypt-button");
-		  decryptButton.addEventListener("click", () => {
-			decryptMessage(keyPair.privateKey);
-		  });
-		})
-	*/
 
-	var action = "encrypt"
-	var key, privateKey;
+	function arrayBufferToBase64( buffer ) {
+		let binary = '';
+		const bytes = new Uint8Array( buffer );
+		const len = bytes.byteLength;
+		for (var i = 0; i < len; i++) {
+			binary += String.fromCharCode( bytes[i] );
+		}
+		return window.btoa( binary );
+	}
+	
+	async function encrypt () {
+		const encoder = new TextEncoder();
+		const encoded = encoder.encode(secret);
+		let cipher;
+		try {
+			cipher = await window.crypto.subtle.encrypt(
+				{
+					name: "RSA-OAEP"
+				},
+				key.publicKey,
+				encoded
+			);
+		} catch (err) {
+			console.error(err);
+		}
+		encrypted = arrayBufferToBase64(cipher);
+	}
+
+	/**
+	 * https://gist.github.com/danallison/3ec9d5314788b337b682
+	 */
+	function downloadString(text, fileType, fileName) {
+		var blob = new Blob([text], { type: fileType });
+
+		var a = document.createElement('a');
+		a.download = fileName;
+		a.href = URL.createObjectURL(blob);
+		a.dataset.downloadurl = [fileType, a.download, a.href].join(':');
+		a.style.display = "none";
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		setTimeout(function() { URL.revokeObjectURL(a.href); }, 1500);
+	}
+
 	generateKey();
-	$: console.log(privateKey)
+
+	$:{
+
+	}
 
 </script>
 
 <main>
 	<h1>Web RSA</h1>
-	{#if action==="encrypt"}
+
 	<h2>Cifrar</h2>
-	<p>Clave secreta:</p>
-	<textarea disabled="false" bind:value="{privateKey}"></textarea>
-	<p>Información cifrada:</p>
-	<textarea disabled="false" bind:value="{ciphertext}"></textarea>
+
+
+	{#if action==="encrypt"}
+
+
+	<h3>Texto a cifrar:</h3>
+	<textarea disabled="{privateKey ? false : true}" maxlength="446" bind:value={secret} on:input={encrypt}></textarea>
+
+	<h3>Clave secreta:</h3>
+	<textarea disabled bind:value={privateKey}></textarea>
+	<button>Download</button>
+
+
+	<h3>Información cifrada:</h3>
+	<textarea disabled bind:value="{encrypted}"></textarea>
+	<button>Download</button>
+
+	<a href="{`data:text/plain;charset=utf-8,${encodeURIComponent(encrypted)}`}" download="encripted.txt">text file</a>
+
 	{:else if action==="decript"}
+
 	<h2>Descifrar</h2>
+
 	{/if}
 </main>
 
 <style>
 	main {
-		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
 		padding: 1em;
 		max-width: 240px;
 		margin: 0 auto;
