@@ -1,58 +1,59 @@
 <script>
 	/*
-		From: Mozilla Developer Network Web Docs
-		- https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt#rsa-oaep_2
-		- https://github.com/mdn/dom-examples/blob/master/web-crypto/encrypt-decrypt/rsa-oaep.js
+	Credits:
+		Mozilla Developer Network Web Docs
+			- https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto
+		Dan Allison
+			- https://gist.github.com/danallison/3ec9d5314788b337b682
 	*/
 
-		/*
-		Fetch the ciphertext and decrypt it.
-		Write the decrypted message into the "Decrypted" box.
-		
-		async function decryptMessage(key) {
-		  let decrypted = await window.crypto.subtle.decrypt(
+	let action = "encrypt";
+	let passphrase, salt, key, exportedKey, counter, secret, encrypted;
+
+	function keySeed () {
+		let enc = new TextEncoder();
+		let seed = enc.encode(passphrase);
+		return window.crypto.subtle.importKey(
+			"raw",
+			seed,
+			"PBKDF2",
+			false,
+			["deriveBits", "deriveKey"]
+ 		);
+	}
+
+	async function derivateKey () {
+		key = await window.crypto.subtle.deriveKey(
 			{
-			  name: "RSA-OAEP"
+			"name": "PBKDF2",
+			salt: salt,
+			"iterations": 100000,
+			"hash": "SHA-512"
 			},
-			key,
-			ciphertext
-		  );
-	  
-		  let dec = new TextDecoder();
-		  const decryptedValue = document.querySelector(".rsa-oaep .decrypted-value");
-		  decryptedValue.classList.add('fade-in');
-		  decryptedValue.addEventListener('animationend', () => {
-			decryptedValue.classList.remove('fade-in');
-		  });
-		  decryptedValue.textContent = dec.decode(decrypted);
-		}
-		*/
-	/*
-	End of Mozilla Developer Network Web Docs content.
-	*/
-
-	var action = "encrypt";
-	var key, privateKey, secret, encrypted;
+			await keySeed(),
+			{ "name": "AES-CTR", "length": 256},
+			true,
+			[ "encrypt", "decrypt" ]
+		);
+		exportedKey = await crypto.subtle.exportKey('jwk',key)
+	}
 
 	function generateKey () {
-		// Fragment taken from  Mozilla Developer Network Web Docs
 		window.crypto.subtle.generateKey(
 		  {
-		  name: "RSA-OAEP",
-		  modulusLength: 4096,
-		  publicExponent: new Uint8Array([1, 0, 1]),
-		  hash: "SHA-256",
+			name: "AES-CTR",
+			length: 256,
 		  },
 		  true,
 		  ["encrypt", "decrypt"]
 		)
-        // Fragment end
 		.then(
 			(k)=>{
 				key = k;
-				crypto.subtle.exportKey('pkcs8',key.privateKey).then(
+				crypto.subtle.exportKey('jwk',key).then(
 					(p)=>{
-						privateKey = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode.apply(null, new Uint8Array(p)))}\n-----END PRIVATE KEY-----`;
+						console.log(JSON.stringify(p))
+						exportedKey = JSON.stringify(p);
 					}
 				)
 			}
@@ -76,9 +77,11 @@
 		try {
 			cipher = await window.crypto.subtle.encrypt(
 				{
-					name: "RSA-OAEP"
+					name: "AES-CTR",
+					counter,
+					length: 64
 				},
-				key.publicKey,
+				key,
 				encoded
 			);
 		} catch (err) {
@@ -88,7 +91,7 @@
 	}
 
 	/**
-	 * https://gist.github.com/danallison/3ec9d5314788b337b682
+	 * 	<a href="{`data:text/plain;charset=utf-8,${encodeURIComponent(encrypted)}`}" download="encripted.txt">text file</a>
 	 */
 	function downloadString(text, fileType, fileName) {
 		var blob = new Blob([text], { type: fileType });
@@ -104,36 +107,32 @@
 		setTimeout(function() { URL.revokeObjectURL(a.href); }, 1500);
 	}
 
+	salt = crypto.getRandomValues(new Uint8Array(16));
+	counter = crypto.getRandomValues(new Uint8Array(16));
 	generateKey();
 
 	$:{
-
+		
 	}
 
 </script>
 
 <main>
-	<h1>Web RSA</h1>
+	<h1>Web AES</h1>
 
 	<h2>Cifrar</h2>
 
-
 	{#if action==="encrypt"}
 
-
 	<h3>Texto a cifrar:</h3>
-	<textarea disabled="{privateKey ? false : true}" maxlength="446" bind:value={secret} on:input={encrypt}></textarea>
+	<textarea disabled="{key ? false : true}" maxlength="446" bind:value={secret} on:input={encrypt}></textarea>
 
-	<h3>Clave secreta:</h3>
-	<textarea disabled bind:value={privateKey}></textarea>
-	<button>Download</button>
-
+	<h3>Frase de paso:</h3>
+	<input type="text" bind:value="{passphrase}" on:input="{derivateKey}"/>
 
 	<h3>Información cifrada:</h3>
 	<textarea disabled bind:value="{encrypted}"></textarea>
-	<button>Download</button>
-
-	<a href="{`data:text/plain;charset=utf-8,${encodeURIComponent(encrypted)}`}" download="encripted.txt">text file</a>
+	<button>Descargar ficheros de clave y texto cifrado</button>
 
 	{:else if action==="decript"}
 
