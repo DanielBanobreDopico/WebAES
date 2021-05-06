@@ -35,7 +35,8 @@
 			true,
 			[ "encrypt", "decrypt" ]
 		);
-		exportedKey = await crypto.subtle.exportKey('jwk',key)
+		exportedKey = await crypto.subtle.exportKey('jwk',key);
+		encrypt();
 	}
 
 	function generateKey () {
