@@ -74,19 +74,27 @@
 		encrypted = arrayBufferToBase64(cipher);
 	}
 
-	/**
-	 * 	<a href="{`data:text/plain;charset=utf-8,${encodeURIComponent(encrypted)}`}" download="encripted.txt">text file</a>
-	 */
-	function download (text, fileType, fileName) {
-		var blob = new Blob([text], { type: fileType });
+	function download () {
 
-		var a = document.createElement('a');
-		a.download = fileName;
+		const fileContent = JSON.stringify(
+			{
+				counter: btoa(counter),
+				secret: encrypted,
+			}
+		)
+
+		const blob = new Blob([fileContent], { type: 'application/json' });
+
+		const a = document.createElement('a');
+
+		a.download = 'encrypted.json';
 		a.href = URL.createObjectURL(blob);
-		a.dataset.downloadurl = [fileType, a.download, a.href].join(':');
+		a.dataset.downloadurl = ['application/json', a.download, a.href].join(':');
 		a.style.display = "none";
+
 		document.body.appendChild(a);
 		a.click();
+
 		document.body.removeChild(a);
 		setTimeout(function() { URL.revokeObjectURL(a.href); }, 1500);
 	}
@@ -117,7 +125,7 @@
 
 	<h3>Información cifrada:</h3>
 	<textarea disabled bind:value="{encrypted}"></textarea>
-	<button>Descargar ficheros de clave y texto cifrado</button>
+	<button on:click="{download}">Descargar ficheros de clave y texto cifrado</button>
 
 	{:else if action==="decript"}
 
