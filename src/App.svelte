@@ -54,10 +54,7 @@
 	}
 	
 	async function encrypt () {
-		const saltedSecret = {
-			secret,
-			padding,
-		}
+		const saltedSecret = '='.repeat(maxSecretLength - secret.length) + secret;
 		const encoder = new TextEncoder();
 		const encoded = encoder.encode(JSON.stringify(saltedSecret));
 		let cipher;
@@ -80,7 +77,7 @@
 	/**
 	 * 	<a href="{`data:text/plain;charset=utf-8,${encodeURIComponent(encrypted)}`}" download="encripted.txt">text file</a>
 	 */
-	function downloadString(text, fileType, fileName) {
+	function download (text, fileType, fileName) {
 		var blob = new Blob([text], { type: fileType });
 
 		var a = document.createElement('a');
@@ -94,25 +91,13 @@
 		setTimeout(function() { URL.revokeObjectURL(a.href); }, 1500);
 	}
 
-	function dec2hex (dec) {
-		return dec.toString(16).padStart(2, "0")
-	}
-
 	counter = crypto.getRandomValues(new Uint8Array(16));
-
-	$: if (secret) {
-		let length = (maxSecretLength - secret.length) / 2;
-		let binaryPadding = crypto.getRandomValues(new Uint8Array(length));
-		padding = Array.from(binaryPadding, dec2hex).join('');
-		padding = padding + '='.repeat(maxSecretLength-(padding.length+secret.length));
-	}
 
 	$:{
 		encryptedObject = {
 			counter: btoa(counter),
 			encrypted,
 		};
-		//console.log(encrypted);
 	}
 
 </script>
