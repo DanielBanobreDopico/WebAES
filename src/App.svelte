@@ -5,13 +5,15 @@
 			- https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto
 		Dan Allison
 			- https://gist.github.com/danallison/3ec9d5314788b337b682
+		Renato Mangini
+			- https://developers.google.com/web/updates/2012/06/How-to-convert-ArrayBuffer-to-and-from-String
 		https://stackoverflow.com/users/633183/thank-you
 			- https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
 	*/
 
 	const maxSecretLength = 446;
 	let action = "encrypt";
-	let passphrase, salt, key, counter, encrypted, encryptedObject, padding;
+	let passphrase, key, counter, encrypted, encryptedObject, decrypted, decryptedString, fileContent;
 	let secret = '';
 
 	function keySeed () {
@@ -43,23 +45,26 @@
 		encrypt();
 	}
 
-	function arrayBufferToBase64( buffer ) {
-		let binary = '';
-		const bytes = new Uint8Array( buffer );
-		const len = bytes.byteLength;
-		for (var i = 0; i < len; i++) {
-			binary += String.fromCharCode( bytes[i] );
-		}
-		return btoa( binary );
+	function ab2str(buf) {
+		return String.fromCharCode.apply(null, new Uint16Array(buf));
 	}
-	
+
+	function str2ab(str) {
+		var buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
+		var bufView = new Uint16Array(buf);
+		for (var i=0, strLen=str.length; i < strLen; i++) {
+			bufView[i] = str.charCodeAt(i);
+		}
+		return buf;
+	}
+
 	async function encrypt () {
-		const saltedSecret = '='.repeat(maxSecretLength - secret.length) + secret;
+		const paddedSecret = secret + '='.repeat(maxSecretLength - secret.length);
 		const encoder = new TextEncoder();
-		const encoded = encoder.encode(JSON.stringify(saltedSecret));
-		let cipher;
+		const encoded = encoder.encode(JSON.stringify(paddedSecret));
+		counter = crypto.getRandomValues(new Uint8Array(16));
 		try {
-			cipher = await window.crypto.subtle.encrypt(
+			encrypted = await window.crypto.subtle.encrypt(
 				{
 					name: "AES-CTR",
 					counter,
@@ -71,19 +76,35 @@
 		} catch (err) {
 			console.error(err);
 		}
-		encrypted = arrayBufferToBase64(cipher);
+	}
+
+	async function decrypt () {
+		const encryptedObject = JSON.parse(fileContent);
+		const counterValues = Object.values(encryptedObject.counter);
+		const counterArray = new Uint8Array(counterValues);
+		const counter = counterArray.buffer
+		const encriptedValues = Object.values(encryptedObject.encrypted);
+		const encryptedArray = new Uint8Array(encriptedValues);
+		const encrypted = encryptedArray.buffer
+		try {
+			let decryptedBuffer = await window.crypto.subtle.decrypt(
+				{
+					name: "AES-CTR",
+					counter,
+					length: 64
+				},
+				key,
+				encrypted,
+			);
+			decrypted = new Uint8Array(decryptedBuffer);
+		} catch (err) {
+			console.error(err);
+		}
 	}
 
 	function download () {
 
-		const fileContent = JSON.stringify(
-			{
-				counter: btoa(counter),
-				secret: encrypted,
-			}
-		)
-
-		const blob = new Blob([fileContent], { type: 'application/json' });
+		const blob = new Blob([encryptedObject], { type: 'application/json' });
 
 		const a = document.createElement('a');
 
@@ -99,13 +120,20 @@
 		setTimeout(function() { URL.revokeObjectURL(a.href); }, 1500);
 	}
 
-	counter = crypto.getRandomValues(new Uint8Array(16));
-
-	$:{
+	$: if (counter) {
 		encryptedObject = {
-			counter: btoa(counter),
-			encrypted,
-		};
+				counter: new Uint8Array(counter),
+				encrypted: new Uint8Array(encrypted),
+
+			}
+		fileContent = JSON.stringify(encryptedObject);
+	}
+
+	$: if (fileContent) {
+		decrypt()
+		let dec = new TextDecoder();
+		let paddedDecryptedString = dec.decode(decrypted);
+		decryptedString = paddedDecryptedString.replace(/=.*$/,'');
 	}
 
 </script>
@@ -117,15 +145,16 @@
 
 	{#if action==="encrypt"}
 
-	<h3>Frase de paso:</h3>
-	<input disabled="{counter ? false : true}" type="text" bind:value="{passphrase}" on:input="{derivateKey}"/>
+	<h3>Frase de cifrado:</h3>
+	<input type="text" bind:value="{passphrase}" on:input="{derivateKey}"/>
 
 	<h3>Texto a cifrar:</h3>
 	<textarea disabled="{key ? false : true}" maxlength="446" bind:value={secret} on:input={encrypt}></textarea>
 
 	<h3>Información cifrada:</h3>
-	<textarea disabled bind:value="{encrypted}"></textarea>
-	<button on:click="{download}">Descargar ficheros de clave y texto cifrado</button>
+	<textarea disabled bind:value="{fileContent}"></textarea>
+	<button on:click="{download}">Descargar fichero cifrado</button>
+	<textarea disabled bind:value="{decryptedString}"></textarea>
 
 	{:else if action==="decript"}
 
