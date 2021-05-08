@@ -136,6 +136,10 @@
 		decryptedString = paddedDecryptedString.replace(/=.*$/,'');
 	}
 
+	/**
+	 * ArrayBuffer -> Uint8Array -> Blob -> btoa
+	 * atob -> Uint8Array -> Blob -> ArrayBuffer
+	*/
 </script>
 
 <main>
