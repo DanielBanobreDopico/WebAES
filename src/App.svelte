@@ -1,14 +1,12 @@
 <script>
 	/*
 	Credits:
-		Mozilla Developer Network Web Docs
-			- https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto
-		Dan Allison
-			- https://gist.github.com/danallison/3ec9d5314788b337b682
-		Renato Mangini
-			- https://developers.google.com/web/updates/2012/06/How-to-convert-ArrayBuffer-to-and-from-String
+		https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto
+		https://gist.github.com/danallison/3ec9d5314788b337b682
 		https://stackoverflow.com/users/633183/thank-you
-			- https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
+		https://stackoverflow.com/questions/1349404/generate-random-string-characters-in-javascript
+		https://stackoverflow.com/questions/9267899/arraybuffer-to-base64-encoded-string
+		https://stackoverflow.com/questions/21797299/convert-base64-string-to-arraybuffer
 	*/
 
 	const maxSecretLength = 446;
@@ -45,23 +43,31 @@
 		encrypt();
 	}
 
-	function ab2str(buf) {
-		return String.fromCharCode.apply(null, new Uint16Array(buf));
+	function bufferToBase64 (buffer) {
+		let binaryString = '';
+		const bytesArray = new Uint8Array(buffer);
+		const len = bytesArray.byteLength;
+		for (let i = 0; i < len; i++) {
+			binaryString += String.fromCharCode(bytesArray[i]);
+		}
+		const base64 = btoa(binaryString);
+		return base64;
 	}
 
-	function str2ab(str) {
-		var buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
-		var bufView = new Uint16Array(buf);
-		for (var i=0, strLen=str.length; i < strLen; i++) {
-			bufView[i] = str.charCodeAt(i);
+	function base64Tobuffer(base64) {
+		const binaryString = atob(base64);
+		const len = binaryString.length;
+		const bytesArray = new Uint8Array(len);
+		for (let i = 0; i < len; i++) {
+			bytesArray[i] = binaryString.charCodeAt(i);
 		}
-		return buf;
+		return bytesArray.buffer;
 	}
 
 	async function encrypt () {
 		const paddedSecret = secret + '='.repeat(maxSecretLength - secret.length);
 		const encoder = new TextEncoder();
-		const encoded = encoder.encode(JSON.stringify(paddedSecret));
+		const encoded = encoder.encode(paddedSecret);
 		counter = crypto.getRandomValues(new Uint8Array(16));
 		try {
 			encrypted = await window.crypto.subtle.encrypt(
@@ -79,15 +85,12 @@
 	}
 
 	async function decrypt () {
+		const dec = new TextDecoder();
 		const encryptedObject = JSON.parse(fileContent);
-		const counterValues = Object.values(encryptedObject.counter);
-		const counterArray = new Uint8Array(counterValues);
-		const counter = counterArray.buffer
-		const encriptedValues = Object.values(encryptedObject.encrypted);
-		const encryptedArray = new Uint8Array(encriptedValues);
-		const encrypted = encryptedArray.buffer
+		const counter = base64Tobuffer(encryptedObject.counter);
+		const encrypted = base64Tobuffer(encryptedObject.encrypted);
 		try {
-			let decryptedBuffer = await window.crypto.subtle.decrypt(
+			const decrypted = await window.crypto.subtle.decrypt(
 				{
 					name: "AES-CTR",
 					counter,
@@ -96,58 +99,52 @@
 				key,
 				encrypted,
 			);
-			decrypted = new Uint8Array(decryptedBuffer);
+			const paddedDecryptedString = dec.decode(decrypted);
+			decryptedString = paddedDecryptedString.replace(/=+$/,'');
 		} catch (err) {
 			console.error(err);
 		}
 	}
 
 	function download () {
-
-		const blob = new Blob([encryptedObject], { type: 'application/json' });
+		const blob = new Blob([fileContent], { type: 'application/json' });
 
 		const a = document.createElement('a');
 
+		a.style.display = "none";
 		a.download = 'encrypted.json';
 		a.href = URL.createObjectURL(blob);
 		a.dataset.downloadurl = ['application/json', a.download, a.href].join(':');
-		a.style.display = "none";
 
 		document.body.appendChild(a);
 		a.click();
-
 		document.body.removeChild(a);
 		setTimeout(function() { URL.revokeObjectURL(a.href); }, 1500);
 	}
 
 	$: if (counter) {
 		encryptedObject = {
-				counter: new Uint8Array(counter),
-				encrypted: new Uint8Array(encrypted),
-
-			}
+			counter: bufferToBase64(counter),
+			encrypted: bufferToBase64(encrypted),
+		}
 		fileContent = JSON.stringify(encryptedObject);
 	}
 
-	$: if (fileContent) {
-		decrypt()
-		let dec = new TextDecoder();
-		let paddedDecryptedString = dec.decode(decrypted);
-		decryptedString = paddedDecryptedString.replace(/=.*$/,'');
-	}
-
-	/**
-	 * ArrayBuffer -> Uint8Array -> Blob -> btoa
-	 * atob -> Uint8Array -> Blob -> ArrayBuffer
-	*/
 </script>
 
 <main>
 	<h1>Web AES</h1>
 
-	<h2>Cifrar</h2>
+	<nav>
+		<ul>
+			<li on:click="{()=>action="encrypt"}">Cifrar</li>
+			<li on:click="{()=>action="decrypt"}">Descifrar</li>
+		</ul>
+	</nav>
 
 	{#if action==="encrypt"}
+
+	<h2>Cifrar</h2>
 
 	<h3>Frase de cifrado:</h3>
 	<input type="text" bind:value="{passphrase}" on:input="{derivateKey}"/>
@@ -155,14 +152,23 @@
 	<h3>Texto a cifrar:</h3>
 	<textarea disabled="{key ? false : true}" maxlength="446" bind:value={secret} on:input={encrypt}></textarea>
 
-	<h3>Información cifrada:</h3>
-	<textarea disabled bind:value="{fileContent}"></textarea>
-	<button on:click="{download}">Descargar fichero cifrado</button>
-	<textarea disabled bind:value="{decryptedString}"></textarea>
+	<button disabled="{passphrase && secret ? false : true}" on:click="{download}">Descargar fichero cifrado</button>
 
-	{:else if action==="decript"}
+	{:else if action==="decrypt"}
 
 	<h2>Descifrar</h2>
+
+	<h3>Datos cifrados</h3>
+	<p>Selecciona el fichero o pega el texto.</p>
+	<textarea bind:value="{fileContent}"></textarea>
+	<button>Selecciona el fichero</button>
+
+	<h3>Frase de cifrado:</h3>
+	<input type="text" bind:value="{passphrase}"/>
+	<button on:click="{decrypt}">Descifrar</button>
+
+	<h3>Datos descifrados</h3>
+	<textarea disabled="true" bind:value="{decryptedString}"></textarea>
 
 	{/if}
 </main>
